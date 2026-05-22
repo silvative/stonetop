@@ -13,21 +13,14 @@
 		{{/if}}
 		{{/if}}
 
-		{{#if stonetop.movelist.playbookMoves.length}}
+		{{#if stonetop.moves.playbookMoves.length}}
 		{{> "stonetop.move-group"
 		    title=(localize "stonetop.character.moves.playbookMoves")
-		    note=stonetop.movelist.startingMovesNote
-		    moves=stonetop.movelist.playbookMoves}}
+		    note=stonetop.moves.startingMovesNote
+		    moves=stonetop.moves.playbookMoves}}
 		{{/if}}
 
-		{{#if stonetop.movelist.postDeathGroup}}
-		{{> "stonetop.move-group"
-		    title=stonetop.movelist.postDeathGroup.label
-		    note=null
-		    moves=stonetop.movelist.postDeathGroup.moves}}
-		{{/if}}
-
-		{{#each stonetop.movelist.otherGroups}}
+		{{#each stonetop.moves.otherGroups}}
 				<div class="stonetop-move-group">
 					<h3 class="stonetop-move-group-title">{{label}}</h3>
 					<ol class="items-list">
@@ -57,7 +50,7 @@
 			<div class="stonetop-move-group">
 				{{> "stonetop.section-heading" title=(localize "stonetop.character.moves.otherMoves")}}
 				<ol class="items-list">
-				{{#each stonetop.movelist.otherMoves}}
+				{{#each stonetop.moves.otherMoves}}
 					<li class="item stonetop-item" data-item-id="{{ownedId}}">
 						<div class="stonetop-item-header">
 							{{#if rollType}}

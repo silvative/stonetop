@@ -5,8 +5,9 @@ import {
 } from "../../model/CharacterSnapshot.js";
 
 export class CharacterPossessions {
-	constructor(flags) {
+	constructor(flags, moves) {
 		this._flags = flags;
+		this._moves = moves;
 	}
 
 	get selected()    { return new Set(this._flags.getFlag("selected") ?? []); }
@@ -57,7 +58,7 @@ export class CharacterPossessions {
 		await this._flags.setFlag("choiceUses", { ...this.choiceUses, [key]: count });
 	}
 
-	computeMaxUses(specialPossessions, ownedAllByName, level) {
+	computeMaxUses(specialPossessions, level) {
 		const result = { ...this.maxUses };
 		for (const opt of (specialPossessions?.options ?? [])) {
 			if (!opt.usesBonus) continue;
@@ -66,18 +67,17 @@ export class CharacterPossessions {
 				bonus += Math.floor(level / 2) * opt.usesBonus.evenLevelBonus;
 			}
 			for (const mb of (opt.usesBonus.moveBonus ?? [])) {
-				const instances = ownedAllByName.get(mb.moveName)?.length ?? 0;
-				bonus += instances * mb.perInstance;
+				bonus += this._moves.countOwnedByName(mb.moveName) * mb.perInstance;
 			}
 			if (bonus > 0) result[opt.slug] = (opt.resource?.max ?? 0) + bonus;
 		}
 		return result;
 	}
 
-	buildSnapshot(specialPossessions, ownedAllByName, actorLevel) {
+	buildSnapshot(specialPossessions, actorLevel) {
 		if (!specialPossessions) return null;
 		const { pickNote, pickCount, preselected = [], options } = specialPossessions;
-		const maxUsesMap = this.computeMaxUses(specialPossessions, ownedAllByName, actorLevel);
+		const maxUsesMap = this.computeMaxUses(specialPossessions, actorLevel);
 		const selectedSlugs = this.selected;
 		const usesMap = this.uses;
 		const preselectedSet = new Set(preselected);

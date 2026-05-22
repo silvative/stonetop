@@ -68,8 +68,7 @@ export function createStonetopCharacterSheetClass(Base) {
 				this._stonetopCharacter.origin.select(ev.currentTarget.value)
 			);
 			html.find(".stonetop-origin-name").on("click", this._onOriginNameClick.bind(this));
-			html.find(".stonetop-move-check").on("change", this._onMoveCheck.bind(this));
-			html.find(".stonetop-repeat-check").on("change", this._onRepeatCheck.bind(this));
+			html.find(".stonetop-move-check, .stonetop-repeat-check").on("change", this._onMoveCheck.bind(this));
 			html.find(".stonetop-bg-choice").on("change", this._onBgChoiceChange.bind(this));
 			html[0].addEventListener("click", ev => {
 				const btn = ev.target.closest(".stonetop-item-resource-check");
@@ -200,29 +199,14 @@ export function createStonetopCharacterSheetClass(Base) {
 		}
 
 		async _onDropItemCreate(itemData) {
-			const items  = Array.isArray(itemData) ? itemData : [itemData];
-			const arcana = items.filter(i => i.type === "move" && i.system?.moveType === "arcanum");
-			const moves  = items.filter(i => i.type === "move" && i.system?.moveType !== "arcanum");
-			const others = items.filter(i => i.type !== "move");
-			let anyAdded = false;
-			for (const item of arcana) {
-				const slug = item.flags?.stonetop?.slug;
-				if (slug) {
-					await this._stonetopCharacter.addArcanum(slug);
-					anyAdded = true;
-				}
-			}
-			for (const item of moves) {
-				if (await this._stonetopCharacter.onDropMove(item)) anyAdded = true;
-			}
+			const items = Array.isArray(itemData) ? itemData : [itemData];
+			const { anyAdded, others } = await this._stonetopCharacter.onDropItems(items);
 			if (others.length) await super._onDropItemCreate(others);
 			if (anyAdded) this.render(false);
 		}
 
 		async _onBackgroundChange(ev) {
-			const slug = ev.currentTarget.value;
-			await this._stonetopCharacter.background.selectBackground(slug);
-			await this._stonetopCharacter.ensureStartingMoves();
+			await this._stonetopCharacter.selectBackground(ev.currentTarget.value);
 		}
 
 		async _onAppearanceChange(ev) {
@@ -231,20 +215,10 @@ export function createStonetopCharacterSheetClass(Base) {
 		}
 
 		async _onOriginNameClick(ev) {
-			const name = ev.currentTarget.textContent.trim();
-			await this._stonetopCharacter.updateName(name);
+			await this._stonetopCharacter.origin.selectName(ev.currentTarget.textContent.trim());
 		}
 
 		async _onMoveCheck(ev) {
-			const el = ev.currentTarget;
-			if (el.checked) {
-				await this._stonetopCharacter.addMove(el.dataset.compendiumId);
-			} else {
-				await this._stonetopCharacter.removeMove(el.dataset.ownedId);
-			}
-		}
-
-		async _onRepeatCheck(ev) {
 			const el = ev.currentTarget;
 			if (el.checked) {
 				await this._stonetopCharacter.addMove(el.dataset.compendiumId);
@@ -331,7 +305,7 @@ export function createStonetopCharacterSheetClass(Base) {
 							const name = html.find("[name=name]").val().trim();
 							if (!name) return;
 							if (isRegular) {
-								const weight = Math.max(1, parseInt(html.find("[name=weight]").val()) || 1);
+								const weight = parseInt(html.find("[name=weight]").val()) || 1;
 								this._stonetopCharacter.addCustomInventoryItem(name, weight)
 									.then(() => this.render(false));
 							} else {

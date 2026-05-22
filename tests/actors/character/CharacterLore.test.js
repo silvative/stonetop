@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { CharacterLore } from "../../../module/actors/character/CharacterLore.js";
+import { LoreSection } from "../../../module/model/CharacterSnapshot.js";
 
 function makeFlags(store = {}) {
 	return {
@@ -7,6 +8,21 @@ function makeFlags(store = {}) {
 		setFlag: vi.fn(async (key, val) => { store[key] = val; }),
 	};
 }
+
+function makeLore(counts = {}, texts = {}) {
+	return new CharacterLore(makeFlags({ counts, texts }));
+}
+
+const LORE_DATA = [
+	{
+		slug: "earth", title: "The Earth", description: "<p>The earth knows.</p>",
+		options: [
+			{ slug: "opt-a", description: "Option A" },
+			{ slug: "opt-b", description: "Option B", max: 3 },
+			{ slug: "opt-text", description: "A text question", type: "text" },
+		],
+	},
+];
 
 describe("CharacterLore", () => {
 	it("counts returns empty object when no flag saved", () => {
@@ -90,5 +106,52 @@ describe("CharacterLore — text values", () => {
 		const flags = makeFlags(store);
 		await new CharacterLore(flags).setText("earth", "q-one", "new");
 		expect(flags.setFlag).toHaveBeenCalledWith("texts", { "earth:q-one": "new" });
+	});
+});
+
+describe("CharacterLore.buildSnapshot", () => {
+	it("returns a LoreSection", () => {
+		expect(makeLore().buildSnapshot(LORE_DATA)).toBeInstanceOf(LoreSection);
+	});
+
+	it("includes one entry per lore entry", () => {
+		expect(makeLore().buildSnapshot(LORE_DATA).entries).toHaveLength(1);
+	});
+
+	it("entry has slug, title, and description", () => {
+		const snap = makeLore().buildSnapshot(LORE_DATA);
+		expect(snap.entries[0].slug).toBe("earth");
+		expect(snap.entries[0].title).toBe("The Earth");
+		expect(snap.entries[0].description).toBe("<p>The earth knows.</p>");
+	});
+
+	it("entry includes all options", () => {
+		expect(makeLore().buildSnapshot(LORE_DATA).entries[0].options).toHaveLength(3);
+	});
+
+	it("checkbox option count comes from getCount", () => {
+		const snap = makeLore({ "earth:opt-a": 1 }).buildSnapshot(LORE_DATA);
+		expect(snap.entries[0].options[0].count).toBe(1);
+	});
+
+	it("checkbox option count defaults to 0 when not saved", () => {
+		expect(makeLore().buildSnapshot(LORE_DATA).entries[0].options[0].count).toBe(0);
+	});
+
+	it("text option textValue comes from getText", () => {
+		const snap = makeLore({}, { "earth:opt-text": "my answer" }).buildSnapshot(LORE_DATA);
+		expect(snap.entries[0].options[2].textValue).toBe("my answer");
+	});
+
+	it("text option textValue defaults to empty string when not saved", () => {
+		expect(makeLore().buildSnapshot(LORE_DATA).entries[0].options[2].textValue).toBe("");
+	});
+
+	it("returns empty entries when loreData is absent", () => {
+		expect(makeLore().buildSnapshot(undefined).entries).toHaveLength(0);
+	});
+
+	it("returns empty entries when loreData is empty", () => {
+		expect(makeLore().buildSnapshot([]).entries).toHaveLength(0);
 	});
 });

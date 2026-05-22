@@ -79,7 +79,7 @@
 				<div class="stonetop-moves-sidebar">
 					{{> "stonetop.section-heading" title=(localize "stonetop.character.moves.basicMoves")}}
 					<ol class="items-list">
-					{{#each stonetop.movelist.basicMoves}}
+					{{#each stonetop.moves.basicMoves}}
 						{{#if (and owned rollType)}}
 						<li class="item stonetop-move-item" data-item-id="{{ownedId}}">
 						{{else}}

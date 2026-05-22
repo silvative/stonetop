@@ -34,8 +34,8 @@ function makeRepo(items = []) {
 	return new FakeInventoryRepository(items);
 }
 
-function makeArcanaFake(items = []) {
-	return { weightedInventoryItems: async () => items };
+function makeFakePlaybook(data = null) {
+	return { getData: async () => data };
 }
 
 function makePossessionsFake(snapshot = null) {
@@ -49,13 +49,13 @@ function makeActor() {
 	};
 }
 
-function makeCi(flagStore = {}, repo = null, arcana = null, possessions = null, actor = null) {
+function makeCi(flagStore = {}, repo = null, possessions = null, actor = null, playbook = null) {
 	return new CharacterInventory(
 		makeFlags(flagStore),
 		repo ?? makeRepo(),
-		arcana ?? makeArcanaFake(),
 		possessions ?? makePossessionsFake(),
 		actor ?? makeActor(),
+		playbook ?? makeFakePlaybook(),
 	);
 }
 
@@ -171,38 +171,38 @@ describe("CharacterInventory.getArmor", () => {
 
 describe("CharacterInventory.buildSnapshot", () => {
 	it("returns an InventorySnapshot", async () => {
-		const snap = await makeCi().buildSnapshot(null, new Map(), 1, []);
+		const snap = await makeCi().buildSnapshot([]);
 		expect(snap).toBeInstanceOf(InventorySnapshot);
 	});
 
 	it("regular item from repo appears in outfit.regularItems", async () => {
 		const repo = makeRepo([makeOutfitItem({ slug: "knife", inventoryColumn: "regular" })]);
-		const snap = await makeCi({}, repo).buildSnapshot(null, new Map(), 1, []);
+		const snap = await makeCi({}, repo).buildSnapshot([]);
 		expect(snap.outfit.regularItems).toHaveLength(1);
 		expect(snap.outfit.regularItems[0].slug).toBe("knife");
 	});
 
 	it("checked flag sets item.checked to true", async () => {
 		const repo = makeRepo([makeOutfitItem({ slug: "knife", inventoryColumn: "regular" })]);
-		const snap = await makeCi({ checked: { knife: true } }, repo).buildSnapshot(null, new Map(), 1, []);
+		const snap = await makeCi({ checked: { knife: true } }, repo).buildSnapshot([]);
 		expect(snap.outfit.regularItems[0].checked).toBe(true);
 	});
 
 	it("unchecked item defaults to false", async () => {
 		const repo = makeRepo([makeOutfitItem({ slug: "knife", inventoryColumn: "regular" })]);
-		const snap = await makeCi({}, repo).buildSnapshot(null, new Map(), 1, []);
+		const snap = await makeCi({}, repo).buildSnapshot([]);
 		expect(snap.outfit.regularItems[0].checked).toBe(false);
 	});
 
 	it("resource.current reflects inventory resources flag", async () => {
 		const repo = makeRepo([makeOutfitItem({ slug: "bow-arrows", inventoryColumn: "regular", resourceLabels: ["low", "out"] })]);
-		const snap = await makeCi({ resources: { "bow-arrows": 1 } }, repo).buildSnapshot(null, new Map(), 1, []);
+		const snap = await makeCi({ resources: { "bow-arrows": 1 } }, repo).buildSnapshot([]);
 		expect(snap.outfit.regularItems[0].resource.current).toBe(1);
 	});
 
 	it("item without resource has resource=null", async () => {
 		const repo = makeRepo([makeOutfitItem({ slug: "knife", inventoryColumn: "regular", resource: null })]);
-		const snap = await makeCi({}, repo).buildSnapshot(null, new Map(), 1, []);
+		const snap = await makeCi({}, repo).buildSnapshot([]);
 		expect(snap.outfit.regularItems[0].resource).toBeNull();
 	});
 
@@ -213,7 +213,7 @@ describe("CharacterInventory.buildSnapshot", () => {
 			type: "equipment",
 			system: { equipmentType: "inventory-custom", inventoryColumn: "regular", weight: 2 },
 		}];
-		const snap = await makeCi().buildSnapshot(null, new Map(), 1, actorItems);
+		const snap = await makeCi().buildSnapshot(actorItems);
 		expect(snap.outfit.regularItems.some(i => i.slug === "custom-1")).toBe(true);
 	});
 
@@ -224,7 +224,7 @@ describe("CharacterInventory.buildSnapshot", () => {
 			type: "equipment",
 			system: { equipmentType: "inventory-custom", inventoryColumn: "regular", weight: 1 },
 		}];
-		const snap = await makeCi().buildSnapshot(null, new Map(), 1, actorItems);
+		const snap = await makeCi().buildSnapshot(actorItems);
 		const item = snap.outfit.regularItems.find(i => i.slug === "custom-1");
 		expect(item.isCustom).toBe(true);
 		expect(item.ownedId).toBe("custom-1");
@@ -232,20 +232,20 @@ describe("CharacterInventory.buildSnapshot", () => {
 
 	it("arcana regular item appears in outfit.regularItems", async () => {
 		const arcanaItem = makeOutfitItem({ slug: "arcanum-1", inventoryColumn: "regular" });
-		const snap = await makeCi({}, makeRepo(), makeArcanaFake([arcanaItem])).buildSnapshot(null, new Map(), 1, []);
+		const snap = await makeCi({}, makeRepo()).buildSnapshot([], [arcanaItem]);
 		expect(snap.outfit.regularItems.some(i => i.slug === "arcanum-1")).toBe(true);
 	});
 
 	it("small items appear in outfit.smallItems", async () => {
 		const repo = makeRepo([makeOutfitItem({ slug: "chalk", inventoryColumn: "small", smallGrid: false })]);
-		const snap = await makeCi({}, repo).buildSnapshot(null, new Map(), 1, []);
+		const snap = await makeCi({}, repo).buildSnapshot([]);
 		expect(snap.outfit.smallItems).toHaveLength(1);
 		expect(snap.outfit.smallItems[0].slug).toBe("chalk");
 	});
 
 	it("smallGrid items appear in outfit.smallGridItems", async () => {
 		const repo = makeRepo([makeOutfitItem({ slug: "coins", inventoryColumn: "small", smallGrid: true })]);
-		const snap = await makeCi({}, repo).buildSnapshot(null, new Map(), 1, []);
+		const snap = await makeCi({}, repo).buildSnapshot([]);
 		expect(snap.outfit.smallGridItems).toHaveLength(1);
 		expect(snap.outfit.smallGridItems[0].slug).toBe("coins");
 	});
@@ -253,55 +253,35 @@ describe("CharacterInventory.buildSnapshot", () => {
 	it("possessions comes from possessions.buildSnapshot", async () => {
 		const possSnap = new PossessionsSnapshot(2, "Pick 2", []);
 		const playbookData = { specialPossessions: { pickCount: 2, pickNote: "Pick 2", options: [] } };
-		const snap = await makeCi({}, makeRepo(), makeArcanaFake(), makePossessionsFake(possSnap))
-			.buildSnapshot(playbookData, new Map(), 1, []);
+		const snap = await makeCi({}, makeRepo(), makePossessionsFake(possSnap), null, makeFakePlaybook(playbookData))
+			.buildSnapshot([]);
 		expect(snap.possessions).toBe(possSnap);
 	});
 
 	it("possessions is null when playbookData is null", async () => {
-		const snap = await makeCi().buildSnapshot(null, new Map(), 1, []);
+		const snap = await makeCi().buildSnapshot([]);
 		expect(snap.possessions).toBeNull();
 	});
 
-	it("other items (moveType=other) appear in inventory.other", async () => {
-		const actorItems = [{
-			_id: "other-1",
-			name: "The Faithful",
-			type: "move",
-			system: { moveType: "other", description: "A follower" },
-		}];
-		const snap = await makeCi().buildSnapshot(null, new Map(), 1, actorItems);
-		expect(snap.other).toHaveLength(1);
-		expect(snap.other[0].name).toBe("The Faithful");
-	});
-
-	it("non-other move items do not appear in inventory.other", async () => {
-		const actorItems = [
-			{ _id: "m1", name: "Hack and Slash", type: "move", system: { moveType: "playbook" } },
-		];
-		const snap = await makeCi().buildSnapshot(null, new Map(), 1, actorItems);
-		expect(snap.other).toHaveLength(0);
-	});
-
 	it("load level is null when not set", async () => {
-		const snap = await makeCi().buildSnapshot(null, new Map(), 1, []);
+		const snap = await makeCi().buildSnapshot([]);
 		expect(snap.outfit.load.selected).toBeNull();
 	});
 
 	it("load level reflects loadLevel flag", async () => {
-		const snap = await makeCi({ loadLevel: "light" }).buildSnapshot(null, new Map(), 1, []);
+		const snap = await makeCi({ loadLevel: "light" }).buildSnapshot([]);
 		expect(snap.outfit.load.loadLevelLight).toBe(true);
 		expect(snap.outfit.load.loadLevelNormal).toBe(false);
 		expect(snap.outfit.load.loadLevelHeavy).toBe(false);
 	});
 
 	it("regularPool.current reflects regularPool flag", async () => {
-		const snap = await makeCi({ regularPool: 3 }).buildSnapshot(null, new Map(), 1, []);
+		const snap = await makeCi({ regularPool: 3 }).buildSnapshot([]);
 		expect(snap.outfit.regularPool.current).toBe(3);
 	});
 
 	it("smallPool.current reflects smallPool flag", async () => {
-		const snap = await makeCi({ smallPool: 5 }).buildSnapshot(null, new Map(), 1, []);
+		const snap = await makeCi({ smallPool: 5 }).buildSnapshot([]);
 		expect(snap.outfit.smallPool.current).toBe(5);
 	});
 
@@ -310,7 +290,7 @@ describe("CharacterInventory.buildSnapshot", () => {
 			makeOutfitItem({ slug: "a", inventoryColumn: "regular", twoCol: false }),
 			makeOutfitItem({ slug: "b", inventoryColumn: "regular", twoCol: true }),
 		]);
-		const snap = await makeCi({}, repo).buildSnapshot(null, new Map(), 1, []);
+		const snap = await makeCi({}, repo).buildSnapshot([]);
 		expect(snap.outfit.regularSegments).toHaveLength(2);
 	});
 });
@@ -318,7 +298,7 @@ describe("CharacterInventory.buildSnapshot", () => {
 describe("CharacterInventory.addCustomItem", () => {
 	it("creates a regular-column equipment item with the given name and weight", async () => {
 		const actor = makeActor();
-		const ci = makeCi({}, null, null, null, actor);
+		const ci = makeCi({}, null, null, actor);
 		await ci.addCustomItem("Rope", 2);
 		expect(actor.createEmbeddedDocuments).toHaveBeenCalledWith("Item", [{
 			name: "Rope",
@@ -329,7 +309,7 @@ describe("CharacterInventory.addCustomItem", () => {
 
 	it("clamps weight to minimum 1", async () => {
 		const actor = makeActor();
-		const ci = makeCi({}, null, null, null, actor);
+		const ci = makeCi({}, null, null, actor);
 		await ci.addCustomItem("Pebble", 0);
 		expect(actor.createEmbeddedDocuments).toHaveBeenCalledWith("Item", [
 			expect.objectContaining({ system: expect.objectContaining({ weight: 1 }) }),
@@ -340,7 +320,7 @@ describe("CharacterInventory.addCustomItem", () => {
 describe("CharacterInventory.addCustomSmallItem", () => {
 	it("creates a small-column equipment item with the given name", async () => {
 		const actor = makeActor();
-		const ci = makeCi({}, null, null, null, actor);
+		const ci = makeCi({}, null, null, actor);
 		await ci.addCustomSmallItem("Coin");
 		expect(actor.createEmbeddedDocuments).toHaveBeenCalledWith("Item", [{
 			name: "Coin",
@@ -353,7 +333,7 @@ describe("CharacterInventory.addCustomSmallItem", () => {
 describe("CharacterInventory.removeCustomItem", () => {
 	it("deletes the embedded document by id", async () => {
 		const actor = makeActor();
-		const ci = makeCi({}, null, null, null, actor);
+		const ci = makeCi({}, null, null, actor);
 		await ci.removeCustomItem("item-42");
 		expect(actor.deleteEmbeddedDocuments).toHaveBeenCalledWith("Item", ["item-42"]);
 	});

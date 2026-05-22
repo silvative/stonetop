@@ -15,7 +15,8 @@
   increasing your total XP by 1.
 * should item typing move from "move" to "equipment"?
 * Add prosperity to inventory tab
-* Add Thrall
+* StonetopItem should be able to call `asOutfitItem`, `asMove`, etc.
+* inventory should take in the actor and arcana to build properly.
 
 == Nice to have
 * toggle to turn off non-selected character options

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { CharacterArcana } from "../../../module/actors/character/CharacterArcana.js";
+import { Stats } from "../../../module/model/data/Stats.js";
 import {
 	ArcanaSnapshot, ArcanaSectionSnapshot,
 	ArcanaUnlockTextItem, ArcanaUnlockOptionSnapshot,
@@ -76,8 +77,21 @@ const ARCANUM_WITH_BACK_OPTS = {
 
 // -- Build helper -------------------------------------------------------------
 
-function makeArcana(flagStore = {}, arcana = [FFYRNIG_SPHERE]) {
-	return new CharacterArcana(makeFlags(flagStore), new FakeArcanaRepository(arcana));
+function makeFakeStats(values = {}) {
+	return { getStats: () => new Stats(values) };
+}
+
+function makeFakeInventory({ checked = {}, resources = {} } = {}) {
+	return { checked, resources };
+}
+
+function makeArcana(flagStore = {}, arcana = [FFYRNIG_SPHERE], fakeStats = null, fakeInventory = null) {
+	return new CharacterArcana(
+		makeFlags(flagStore),
+		new FakeArcanaRepository(arcana),
+		fakeStats ?? makeFakeStats(),
+		fakeInventory ?? makeFakeInventory(),
+	);
 }
 
 // -- Tests --------------------------------------------------------------------
@@ -246,11 +260,12 @@ describe("CharacterArcana.buildSnapshot()", () => {
 			expect((await getItem()).back.resource).toMatchObject({ current: 0, max: 3, title: "Ffyrnig Tonic" });
 		});
 
-		it("back.resource.current reflects inventoryResources param", async () => {
-			const item = await (async () => {
-				const arcana = makeArcana({ owned: ["huge-wooden-sphere"] });
-				return (await arcana.buildSnapshot({}, {}, { "huge-wooden-sphere": 2 })).minor.items[0];
-			})();
+		it("back.resource.current reflects inventoryResources", async () => {
+			const arcana = makeArcana(
+				{ owned: ["huge-wooden-sphere"] }, [FFYRNIG_SPHERE],
+				null, makeFakeInventory({ resources: { "huge-wooden-sphere": 2 } }),
+			);
+			const item = (await arcana.buildSnapshot()).minor.items[0];
 			expect(item.back.resource.current).toBe(2);
 		});
 
@@ -403,13 +418,15 @@ const BOW_WITH_NO_STRING = {
 	},
 };
 
-describe("CharacterArcana.buildSnapshot() — inventoryResources param", () => {
+describe("CharacterArcana.buildSnapshot() — inventoryResources", () => {
 	it("back.resource uses inventoryResources current for back.resource arcana", async () => {
 		const arcana = new CharacterArcana(
 			makeFlags({ owned: ["huge-wooden-sphere"] }),
 			new FakeArcanaRepository([FFYRNIG_SPHERE]),
+			makeFakeStats(),
+			makeFakeInventory({ resources: { "huge-wooden-sphere": 2 } }),
 		);
-		const item = (await arcana.buildSnapshot({}, {}, { "huge-wooden-sphere": 2 })).minor.items[0];
+		const item = (await arcana.buildSnapshot()).minor.items[0];
 		expect(item.back.resource.current).toBe(2);
 	});
 
@@ -417,6 +434,7 @@ describe("CharacterArcana.buildSnapshot() — inventoryResources param", () => {
 		const arcana = new CharacterArcana(
 			makeFlags({ owned: ["huge-wooden-sphere"] }),
 			new FakeArcanaRepository([FFYRNIG_SPHERE]),
+			makeFakeStats(), makeFakeInventory(),
 		);
 		const item = (await arcana.buildSnapshot()).minor.items[0];
 		expect(item.back.resource.current).toBe(0);
@@ -426,8 +444,10 @@ describe("CharacterArcana.buildSnapshot() — inventoryResources param", () => {
 		const arcana = new CharacterArcana(
 			makeFlags({ owned: ["bow-with-no-string"] }),
 			new FakeArcanaRepository([BOW_WITH_NO_STRING]),
+			makeFakeStats(),
+			makeFakeInventory({ resources: { "bow-with-no-string": 1 } }),
 		);
-		const item = (await arcana.buildSnapshot({}, {}, { "bow-with-no-string": 1 })).minor.items[0];
+		const item = (await arcana.buildSnapshot()).minor.items[0];
 		expect(item.back.item.resource).not.toBeNull();
 		expect(item.back.item.resource.current).toBe(1);
 		expect(item.back.item.resource.max).toBe(3);
@@ -438,6 +458,7 @@ describe("CharacterArcana.buildSnapshot() — inventoryResources param", () => {
 		const arcana = new CharacterArcana(
 			makeFlags({ owned: ["bow-with-no-string"] }),
 			new FakeArcanaRepository([BOW_WITH_NO_STRING]),
+			makeFakeStats(), makeFakeInventory(),
 		);
 		const item = (await arcana.buildSnapshot()).minor.items[0];
 		expect(item.back.item.resource.current).toBe(0);
@@ -447,6 +468,7 @@ describe("CharacterArcana.buildSnapshot() — inventoryResources param", () => {
 		const arcana = new CharacterArcana(
 			makeFlags({ owned: ["bow-with-no-string"] }),
 			new FakeArcanaRepository([BOW_WITH_NO_STRING]),
+			makeFakeStats(), makeFakeInventory(),
 		);
 		expect((await arcana.buildSnapshot()).minor.items[0].back.resource).toBeNull();
 	});
@@ -455,6 +477,7 @@ describe("CharacterArcana.buildSnapshot() — inventoryResources param", () => {
 		const arcana = new CharacterArcana(
 			makeFlags({ owned: ["huge-wooden-sphere"] }),
 			new FakeArcanaRepository([FFYRNIG_SPHERE]),
+			makeFakeStats(), makeFakeInventory(),
 		);
 		expect((await arcana.buildSnapshot()).minor.items[0].back.item.resource).toBeNull();
 	});
@@ -464,18 +487,21 @@ describe("CharacterArcana.buildSnapshot() — inventoryResources param", () => {
 		const arcana = new CharacterArcana(
 			makeFlags({ owned: ["huge-wooden-sphere"] }),
 			new FakeArcanaRepository([noResource]),
+			makeFakeStats(), makeFakeInventory(),
 		);
 		expect((await arcana.buildSnapshot()).minor.items[0].back.resource).toBeNull();
 	});
 });
 
 describe("CharacterArcana.buildSnapshot() — maxStat resolution", () => {
-	it("maxStat resolves to stat value from stats param", async () => {
+	it("maxStat resolves to stat value from stats", async () => {
 		const arcana = new CharacterArcana(
 			makeFlags({ owned: ["carvings-in-a-cave"] }),
 			new FakeArcanaRepository([CARVINGS_IN_A_CAVE]),
+			makeFakeStats({ con: 3 }),
+			makeFakeInventory(),
 		);
-		const item = (await arcana.buildSnapshot({ con: { value: 3 } })).minor.items[0];
+		const item = (await arcana.buildSnapshot()).minor.items[0];
 		expect(item.back.resource.max).toBe(3);
 	});
 
@@ -483,8 +509,9 @@ describe("CharacterArcana.buildSnapshot() — maxStat resolution", () => {
 		const arcana = new CharacterArcana(
 			makeFlags({ owned: ["carvings-in-a-cave"] }),
 			new FakeArcanaRepository([CARVINGS_IN_A_CAVE]),
+			makeFakeStats(), makeFakeInventory(),
 		);
-		const item = (await arcana.buildSnapshot({})).minor.items[0];
+		const item = (await arcana.buildSnapshot()).minor.items[0];
 		expect(item.back.resource.max).toBe(0);
 	});
 
@@ -492,6 +519,7 @@ describe("CharacterArcana.buildSnapshot() — maxStat resolution", () => {
 		const arcana = new CharacterArcana(
 			makeFlags({ owned: ["huge-wooden-sphere"] }),
 			new FakeArcanaRepository([FFYRNIG_SPHERE]),
+			makeFakeStats(), makeFakeInventory(),
 		);
 		const item = (await arcana.buildSnapshot()).minor.items[0];
 		expect(item.back.resource.max).toBe(3);
@@ -503,6 +531,7 @@ describe("CharacterArcana.buildSnapshot() — checked state", () => {
 		const arcana = new CharacterArcana(
 			makeFlags({ owned: ["huge-wooden-sphere"] }),
 			new FakeArcanaRepository([FFYRNIG_SPHERE]),
+			makeFakeStats(), makeFakeInventory(),
 		);
 		const item = (await arcana.buildSnapshot()).minor.items[0];
 		expect(item.checked).toBe(false);
@@ -512,8 +541,10 @@ describe("CharacterArcana.buildSnapshot() — checked state", () => {
 		const arcana = new CharacterArcana(
 			makeFlags({ owned: ["huge-wooden-sphere"] }),
 			new FakeArcanaRepository([FFYRNIG_SPHERE]),
+			makeFakeStats(),
+			makeFakeInventory({ checked: { "huge-wooden-sphere": true } }),
 		);
-		const item = (await arcana.buildSnapshot({}, { "huge-wooden-sphere": true })).minor.items[0];
+		const item = (await arcana.buildSnapshot()).minor.items[0];
 		expect(item.checked).toBe(true);
 	});
 
@@ -521,8 +552,10 @@ describe("CharacterArcana.buildSnapshot() — checked state", () => {
 		const arcana = new CharacterArcana(
 			makeFlags({ owned: ["huge-wooden-sphere"] }),
 			new FakeArcanaRepository([FFYRNIG_SPHERE]),
+			makeFakeStats(),
+			makeFakeInventory({ checked: { "other-slug": true } }),
 		);
-		const item = (await arcana.buildSnapshot({}, { "other-slug": true })).minor.items[0];
+		const item = (await arcana.buildSnapshot()).minor.items[0];
 		expect(item.checked).toBe(false);
 	});
 });

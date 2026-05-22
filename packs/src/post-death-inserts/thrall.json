@@ -1,6 +1,6 @@
 {
   "name": "Thrall",
-  "type": "playbook",
+  "type": "equipment",
   "img": "assets/post-death-inserts/Thrall.svg",
   "system": {
     "slug": "thrall",

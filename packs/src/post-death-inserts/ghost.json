@@ -1,6 +1,6 @@
 {
   "name": "Ghost",
-  "type": "playbook",
+  "type": "equipment",
   "img": "assets/post-death-inserts/ghost.svg",
   "system": {
     "slug": "ghost",

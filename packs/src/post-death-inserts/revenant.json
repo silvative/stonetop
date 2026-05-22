@@ -1,6 +1,6 @@
 {
   "name": "Revenant",
-  "type": "playbook",
+  "type": "equipment",
   "img": "assets/post-death-inserts/revenant.svg",
   "system": {
     "slug": "revenant",

@@ -4,18 +4,17 @@ import {
 	InventorySnapshot,
 	LoadOptionSnapshot,
 	LoadSnapshotBuilder,
-	OtherItemSnapshotBuilder,
 	OutfitSnapshotBuilder,
 	ResourceBuilder,
 } from "../../model/CharacterSnapshot.js";
 
 export class CharacterInventory {
-	constructor(flags, inventoryRepo, arcana, possessions, actor) {
-		this._flags      = flags;
-		this._repo       = inventoryRepo;
-		this._arcana     = arcana;
+	constructor(flags, inventoryRepo, possessions, actor, playbook) {
+		this._flags       = flags;
+		this._repo        = inventoryRepo;
 		this._possessions = possessions;
-		this._actor      = actor;
+		this._actor       = actor;
+		this._playbook    = playbook;
 	}
 
 	get checked()      { return this._flags.getFlag("checked") ?? {}; }
@@ -77,7 +76,9 @@ export class CharacterInventory {
 		return this.calculateArmor(allItems);
 	}
 
-	async buildSnapshot(playbookData, ownedAllByName, actorLevel, actorItems) {
+	async buildSnapshot(actorItems, arcanaItems = []) {
+		const playbookData = await this._playbook.getData();
+		const actorLevel = this._actor.system?.attributes?.level?.value ?? 1;
 		const checked   = this.checked;
 		const resources = this.resources;
 		const rPool     = this.regularPool;
@@ -122,7 +123,6 @@ export class CharacterInventory {
 			.withBreakBefore(false)
 			.build();
 
-		const arcanaItems = await this._arcana.weightedInventoryItems();
 		const allSmall = allItems.filter(i => i.inventoryColumn === "small");
 		const flatRegular = [
 			...allItems.filter(i => i.inventoryColumn === "regular").map(mapItem),
@@ -131,19 +131,8 @@ export class CharacterInventory {
 		];
 
 		const possessions = this._possessions.buildSnapshot(
-			playbookData?.specialPossessions ?? null, ownedAllByName, actorLevel
+			playbookData?.specialPossessions ?? null, actorLevel
 		);
-
-		const other = actorItems
-			.filter(i => i.type === "move" && i.system?.moveType === "other")
-			.map(i => new OtherItemSnapshotBuilder()
-				.withId(i._id)
-				.withName(i.name)
-				.withDescription(i.system?.description ?? null)
-				.withMoveType(i.system?.moveType ?? null)
-				.withOwnedId(i._id)
-				.build()
-			);
 
 		const load = new LoadSnapshotBuilder()
 			.withInstruction(_loc("stonetop.inventory.outfit.heading"))
@@ -172,7 +161,7 @@ export class CharacterInventory {
 			.withSmallPool(new ResourceBuilder().withCurrent(sPool).withMax(9).withTitle(null).withLabels([]).build())
 			.build();
 
-		return new InventorySnapshot(outfit, possessions, other);
+		return new InventorySnapshot(outfit, possessions);
 	}
 }
 

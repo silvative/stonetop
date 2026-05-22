@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CharacterStats } from "../../../module/actors/character/CharacterStats.js";
+import { Stats } from "../../../module/model/data/Stats.js";
 import { FakeActorBuilder } from "../../fakes/FakeActorBuilder.js";
 
 // -- Helpers -------------------------------------------------------------------
@@ -48,6 +49,28 @@ function makeOnRollActor(item, { pbtaRollMode = "def", debilities = {} } = {}) {
 	actor.items = itemsArr;
 	return actor;
 }
+
+// -- getStats ------------------------------------------------------------------
+
+describe("CharacterStats.getStats", () => {
+	it("returns a Stats instance", () => {
+		expect(new CharacterStats(makeStatsActor()).getStats()).toBeInstanceOf(Stats);
+	});
+
+	it("named stat property reflects actor value", () => {
+		const actor = makeStatsActor({ con: { value: 3 } });
+		expect(new CharacterStats(actor).getStats().con).toBe(3);
+	});
+
+	it("get(key) reflects actor value", () => {
+		const actor = makeStatsActor({ str: { value: -1 } });
+		expect(new CharacterStats(actor).getStats().get("str")).toBe(-1);
+	});
+
+	it("defaults to 0 for missing stats", () => {
+		expect(new CharacterStats(makeStatsActor()).getStats().wis).toBe(0);
+	});
+});
 
 // -- buildStatsSnapshot --------------------------------------------------------
 

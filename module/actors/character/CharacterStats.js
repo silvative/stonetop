@@ -1,4 +1,5 @@
 import { StatSnapshot, DebilitySnapshotBuilder } from "../../model/CharacterSnapshot.js";
+import { Stats } from "../../model/data/Stats.js";
 
 const _STAT_DEFS = {
 	str: { name: "Strength",     abbr: "STR" },
@@ -20,12 +21,17 @@ export class CharacterStats {
 		this._actor = actor;
 	}
 
+	getStats() {
+		const raw = this._actor.system?.stats ?? {};
+		return new Stats(Object.fromEntries(Object.keys(_STAT_DEFS).map(k => [k, raw[k]?.value ?? 0])));
+	}
+
 	buildStatsSnapshot() {
-		const rawStats = this._actor.system?.stats ?? {};
+		const stats = this.getStats();
 		return Object.fromEntries(
 			Object.entries(_STAT_DEFS).map(([key, { name, abbr }]) => [
 				key,
-				new StatSnapshot(rawStats[key]?.value ?? 0, name, abbr),
+				new StatSnapshot(stats.get(key), name, abbr),
 			])
 		);
 	}

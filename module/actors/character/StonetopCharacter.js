@@ -1,23 +1,4 @@
-import {
-	LoreOptionSnapshotBuilder,
-	LoreEntrySnapshotBuilder,
-	LoreSection,
-	AppearanceLineSnapshot,
-	AppearanceOptionSnapshot,
-	AppearanceSection,
-	BackgroundChoiceOptionSnapshot,
-	BackgroundChoicesSnapshotBuilder,
-	BackgroundOptionSnapshotBuilder,
-	BackgroundSection,
-	CharacterSnapshotBuilder,
-	InstinctOptionSnapshotBuilder,
-	InstinctSection,
-	OriginOptionSnapshot,
-	OriginSection,
-	PlaybookSnapshotBuilder,
-	ValueMax,
-	VitalsSnapshotBuilder,
-} from "../../model/CharacterSnapshot.js";
+import {CharacterSnapshotBuilder} from "../../model/CharacterSnapshot.js";
 import {MoveResources} from "./MoveResources.js";
 import {CharacterMoves} from "./CharacterMoves.js";
 import {StonetopFlags} from "./StonetopFlags.js";
@@ -29,33 +10,37 @@ import {CharacterPossessions} from "./CharacterPossessions.js";
 import {CharacterInventory} from "./CharacterInventory.js";
 import {CharacterArcana} from "./CharacterArcana.js";
 import {CharacterLore} from "./CharacterLore.js";
-import {CharacterPostDeath, buildLoreSection} from "./CharacterPostDeath.js";
+import {CharacterPostDeath} from "./CharacterPostDeath.js";
 import {CharacterStats} from "./CharacterStats.js";
+import {CharacterVitals} from "./CharacterVitals.js";
+import {CharacterPlaybook} from "./CharacterPlaybook.js";
 import {FoundryRepositoryFactory} from "./repositories/FoundryRepositoryFactory.js";
 
 export class StonetopCharacter {
 	constructor(actor, repos) {
 		this._actor = actor;
-		this._playbookRepo = repos.playbook;
 		this._background = new CharacterBackgrounds(new StonetopFlags(actor, "background"));
 		this._instinct = new CharacterInstincts(new StonetopFlags(actor, "instinct"));
 		this._appearance = new CharacterAppearance(new StonetopFlags(actor, "appearance"));
-		this._origin = new CharacterOrigin(new StonetopFlags(actor, "origin"));
-		this._moveResources = new MoveResources(new StonetopFlags(actor, "moves"));
-		this._moves = new CharacterMoves(repos.moves, this._moveResources, actor);
-		this._possessions = new CharacterPossessions(new StonetopFlags(actor, "possessions"));
-		this._arcana = new CharacterArcana(new StonetopFlags(actor, "arcana"), repos.arcana);
-		this._inventory = new CharacterInventory(new StonetopFlags(actor, "inventory"), repos.inventory, this._arcana, this._possessions, actor);
+		this._origin = new CharacterOrigin(new StonetopFlags(actor, "origin"), actor);
 		this._lore = new CharacterLore(new StonetopFlags(actor, "lore"));
+		this._stats = new CharacterStats(actor);
+		this._playbook = new CharacterPlaybook(actor, repos.playbook);
+		this._moveResources = new MoveResources(new StonetopFlags(actor, "moves"));
+		this._moves = new CharacterMoves(repos.moves, this._moveResources, actor, this._playbook);
+		this._possessions = new CharacterPossessions(new StonetopFlags(actor, "possessions"), this._moves);
+		this._inventory = new CharacterInventory(new StonetopFlags(actor, "inventory"), repos.inventory, this._possessions, actor, this._playbook);
+		this._arcana = new CharacterArcana(new StonetopFlags(actor, "arcana"), repos.arcana, this._stats, this._inventory);
+		this._vitals = new CharacterVitals(actor, this._playbook, this._inventory);
 		this._postDeath = new CharacterPostDeath(
 			new StonetopFlags(actor, "postDeathInsert"),
 			new CharacterInstincts(new StonetopFlags(actor, "postDeathInstinct")),
 			new CharacterLore(new StonetopFlags(actor, "postDeathLore")),
 			repos.postDeathInsert,
 			repos.moves,
+			this._moves,
 			actor,
 		);
-		this._stats = new CharacterStats(actor);
 	}
 
 	static create(actor) {
@@ -86,37 +71,25 @@ export class StonetopCharacter {
 		return this._possessions;
 	}
 
-	async updateName(name) {
-		await this._actor.update({name});
-	}
-
 	async playbook() {
-		const slug = this._actor.system?.playbook?.slug;
-		if (!slug) return null;
-		return this._playbookRepo.findBySlug(slug);
+		return this._playbook.getData();
 	}
 
 	async buildSnapshot() {
 		const actor = this._actor;
-		const actorLevel = actor.system?.attributes?.level?.value ?? 1;
-		const playbookData = await this.playbook();
-		const ownedAllByName = this._moves.buildOwnedMovesMap();
 		const actorItems = [...actor.items];
-		const moves = await this._moves.buildSnapshot(playbookData, this._background.selectedSlug, actorLevel);
-		const inventory = await this._inventory.buildSnapshot(playbookData, ownedAllByName, actorLevel, actorItems);
-		const armor = await this._inventory.getArmor();
+		const arcanaItems = await this._arcana.weightedInventoryItems();
+		const inventory = await this._inventory.buildSnapshot(actorItems, arcanaItems);
 		const postDeath = await this._postDeath.buildSnapshot();
-		const pdiLabel = postDeath.activeInsert?.name ?? null;
 		return new CharacterSnapshotBuilder()
 			.withName(actor.name)
-			.withPlaybook(playbookData ? _buildPlaybookSection(playbookData, this._background, this._instinct, this._appearance, this._origin, this._lore) : null)
+			.withPlaybook(await this._playbook.buildPlaybookSnapshot(this._background, this._instinct, this._appearance, this._origin, this._lore))
 			.withDebilities(this._stats.buildDebilitiesSnapshot())
 			.withStats(this._stats.buildStatsSnapshot())
-			.withVitals(_buildVitalsSection(actor, playbookData, armor))
-			.withMoves(moves)
-			.withMovelist(this._moves.buildMovelist(moves, inventory.other, pdiLabel))
+			.withVitals(await this._vitals.buildVitalsSnapshot())
+			.withMoves(await this._moves.buildSnapshot(this._background.selectedSlug))
 			.withInventory(inventory)
-			.withArcana(await this._arcana.buildSnapshot(actor.system.stats ?? {}, this._inventory.checked, this._inventory.resources))
+			.withArcana(await this._arcana.buildSnapshot())
 			.withPostDeathInsert(postDeath)
 			.withRollMode(actor.flags?.pbta?.rollMode ?? "normal")
 			.build();
@@ -162,9 +135,17 @@ export class StonetopCharacter {
 		await this._moveResources.add(button);
 	}
 
-	async addCustomInventoryItem(name, weight) { await this._inventory.addCustomItem(name, weight); }
-	async addCustomSmallItem(name)             { await this._inventory.addCustomSmallItem(name); }
-	async removeCustomInventoryItem(itemId)    { await this._inventory.removeCustomItem(itemId); }
+	async addCustomInventoryItem(name, weight) {
+		await this._inventory.addCustomItem(name, weight);
+	}
+
+	async addCustomSmallItem(name) {
+		await this._inventory.addCustomSmallItem(name);
+	}
+
+	async removeCustomInventoryItem(itemId) {
+		await this._inventory.removeCustomItem(itemId);
+	}
 
 	async selectPossession(slug) {
 		await this._possessions.select(slug);
@@ -194,8 +175,31 @@ export class StonetopCharacter {
 		await this._possessions.setChoiceUses(possessionSlug, choiceSlug, count);
 	}
 
+	async selectBackground(slug) {
+		await this._background.selectBackground(slug);
+		await this.ensureStartingMoves();
+	}
+
 	async ensureStartingMoves() {
-		await this._moves.ensureStartingMoves(await this.playbook(), this._background.selectedSlug);
+		await this._moves.ensureStartingMoves(this._background.selectedSlug);
+	}
+
+	async onDropItems(items) {
+		const arcana = items.filter(i => i.type === "move" && i.system?.moveType === "arcanum");
+		const moves = items.filter(i => i.type === "move" && i.system?.moveType !== "arcanum");
+		const others = items.filter(i => i.type !== "move");
+		let anyAdded = false;
+		for (const item of arcana) {
+			const slug = item.flags?.stonetop?.slug;
+			if (slug) {
+				await this.addArcanum(slug);
+				anyAdded = true;
+			}
+		}
+		for (const item of moves) {
+			if (await this.onDropMove(item)) anyAdded = true;
+		}
+		return {anyAdded, others};
 	}
 
 	async addMove(compendiumId) {
@@ -223,8 +227,13 @@ export class StonetopCharacter {
 		await this.ensureStartingMoves();
 	}
 
-	async onRoll(event)      { return this._stats.onRoll(event); }
-	async onDropMove(itemData) { return this._moves.onDropMove(itemData); }
+	async onRoll(event) {
+		return this._stats.onRoll(event);
+	}
+
+	async onDropMove(itemData) {
+		return this._moves.onDropMove(itemData);
+	}
 
 	async addArcanum(slug) {
 		await this._arcana.addArcanum(slug);
@@ -261,83 +270,4 @@ export class StonetopCharacter {
 	async setLoreOptionText(loreSlug, optionSlug, value) {
 		await this._lore.setText(loreSlug, optionSlug, value);
 	}
-}
-
-// ── Snapshot helpers ──────────────────────────────────────────────────────────
-
-function _toSlug(name) {
-	return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
-
-function _buildVitalsSection(actor, playbookData, armorValue) {
-	const attrs = actor.system?.attributes ?? {};
-	const level = attrs.level?.value ?? 1;
-	return new VitalsSnapshotBuilder()
-		.withHp(playbookData ? new ValueMax(attrs.hp?.value ?? 0, playbookData.hp ?? 0) : new ValueMax(0, 0))
-		.withDamage(playbookData?.damage ?? null)
-		.withArmor(armorValue)
-		.withLevel(level)
-		.withXp(new ValueMax(attrs.xp?.value ?? 0, 6 + level * 2))
-		.build();
-}
-
-function _buildPlaybookSection(playbookData, background, instinct, appearance, origin, lore) {
-	const savedBg = background.selectedSlug || null;
-	const savedChoices = background.choices;
-	const savedInstinct = instinct.selectedValue || null;
-	const savedAppearance = appearance.saved;
-	const savedOrigin = origin.selected || null;
-
-	const bgOptions = (playbookData.backgrounds ?? []).map(b => {
-		const choices = b.choices ? new BackgroundChoicesSnapshotBuilder()
-			.withLabel(b.choices.label)
-			.withCount(b.choices.count)
-			.withCountLabel(b.choices.count.join(" or "))
-			.withOptions(b.choices.options.map(o =>
-				new BackgroundChoiceOptionSnapshot(o.slug, o.label, !!(savedChoices?.[o.slug]))
-			))
-			.withSaved(savedChoices)
-			.build() : null;
-		return new BackgroundOptionSnapshotBuilder()
-			.withSlug(b.slug)
-			.withLabel(b.label)
-			.withDescription(b.description ?? "")
-			.withSelected(b.slug === savedBg)
-			.withMoves((b.moves ?? []).map(_toSlug))
-			.withChoices(choices)
-			.build();
-	});
-
-	const instinctOptions = (playbookData.instincts ?? []).map(({word, description}) => {
-		const value = `${word} — ${description}`;
-		return new InstinctOptionSnapshotBuilder()
-			.withWord(word)
-			.withDescription(description)
-			.withValue(value)
-			.withSelected(savedInstinct === value)
-			.build();
-	});
-
-	const appearanceOptions = (playbookData.appearance ?? []).map((opts, i) =>
-		new AppearanceLineSnapshot(i, opts.map(v =>
-			new AppearanceOptionSnapshot(v, (savedAppearance?.[i]) === v)
-		))
-	);
-
-	const originOptions = (playbookData.origin ?? []).map(({region, names}) =>
-		new OriginOptionSnapshot(region, names, region === savedOrigin)
-	);
-
-	return new PlaybookSnapshotBuilder()
-		.withSlug(playbookData.slug)
-		.withName(playbookData.name)
-		.withImg(playbookData.img ?? null)
-		.withDescription(playbookData.description ?? null)
-		.withStatsNote(playbookData.statsNote ?? null)
-		.withLore(buildLoreSection(playbookData.lore ?? [], lore))
-		.withBackground(new BackgroundSection(savedBg, bgOptions))
-		.withInstinct(new InstinctSection(savedInstinct, instinctOptions))
-		.withAppearance(new AppearanceSection(appearanceOptions))
-		.withOrigin(new OriginSection(savedOrigin, originOptions))
-		.build();
 }

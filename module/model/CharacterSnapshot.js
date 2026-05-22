@@ -60,8 +60,7 @@ export {
  * @property {DebilitySnapshot[]} debilities - always 3: weakened, dazed, miserable
  * @property {Object.<string, StatSnapshot>} stats - keys: str dex con int wis cha
  * @property {VitalsSnapshot} vitals
- * @property {MoveCategorySnapshot[]} moves - only categories with ≥1 move included
- * @property {Movelist} movelist
+ * @property {Movelist} moves
  * @property {InventorySnapshot} inventory
  * @property {ArcanaSnapshot} arcana
  * @property {PostDeathSectionSnapshot} postDeathInsert
@@ -75,7 +74,6 @@ export class CharacterSnapshot {
 		this.stats           = b._stats;
 		this.vitals          = b._vitals;
 		this.moves           = b._moves;
-		this.movelist        = b._movelist;
 		this.inventory       = b._inventory;
 		this.arcana          = b._arcana;
 		this.postDeathInsert = b._postDeathInsert;
@@ -90,7 +88,6 @@ export class CharacterSnapshotBuilder {
 	withStats(v)           { this._stats           = v; return this; }
 	withVitals(v)          { this._vitals          = v; return this; }
 	withMoves(v)           { this._moves           = v; return this; }
-	withMovelist(v)        { this._movelist        = v; return this; }
 	withInventory(v)       { this._inventory       = v; return this; }
 	withArcana(v)          { this._arcana          = v; return this; }
 	withPostDeathInsert(v) { this._postDeathInsert = v; return this; }

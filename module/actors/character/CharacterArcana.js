@@ -23,9 +23,11 @@ function _buildOutfitItem(slug, itemData, resolvedResource = undefined) {
 }
 
 export class CharacterArcana {
-	constructor(flags, arcanaRepo) {
-		this._flags = flags;
+	constructor(flags, arcanaRepo, stats = null, inventory = null) {
+		this._flags      = flags;
 		this._arcanaRepo = arcanaRepo;
+		this._stats      = stats;
+		this._inventory  = inventory;
 	}
 
 	get ownedSlugs()      { return new Set(this._flags.getFlag("owned") ?? []); }
@@ -33,7 +35,10 @@ export class CharacterArcana {
 	get unlockCounts()    { return this._flags.getFlag("unlock") ?? {}; }
 	get backOptionCounts(){ return this._flags.getFlag("backOptions") ?? {}; }
 
-	async buildSnapshot(stats = {}, checkedMap = {}, inventoryResources = {}) {
+	async buildSnapshot() {
+		const stats              = this._stats?.getStats() ?? {};
+		const checkedMap         = this._inventory?.checked ?? {};
+		const inventoryResources = this._inventory?.resources ?? {};
 		const ownedSlugs       = this.ownedSlugs;
 		const flippedSlugs     = this.flippedSlugs;
 		const unlockCounts     = this.unlockCounts;
@@ -78,7 +83,7 @@ export class CharacterArcana {
 				? new ResourceBuilder()
 					.withCurrent(inventoryResources[item.slug] ?? 0)
 					.withMax(item.back.resource.maxStat
-						? (stats[item.back.resource.maxStat]?.value ?? 0)
+						? (stats.get(item.back.resource.maxStat))
 						: item.back.resource.max)
 					.withMaxStat(item.back.resource.maxStat ?? null)
 					.withTitle(item.back.resource.title ?? null)
